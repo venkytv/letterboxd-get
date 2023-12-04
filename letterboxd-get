@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+import argparse
+from datetime import datetime
+import feedparser
+import json
+from pydantic import BaseModel, field_validator, field_serializer
+
+class Film(BaseModel):
+    title: str
+    year: int
+    tmdb_id: int
+
+    watched_date: datetime
+    rating: float
+
+    @field_validator("watched_date", mode="before")
+    @classmethod
+    def parse_watched_date(cls, v: str) -> datetime:
+        return datetime.strptime(v, "%Y-%m-%d")
+
+    @field_serializer("watched_date")
+    def serialize_watched_date(self, v: datetime) -> str:
+        return v.strftime("%Y-%m-%d")
+
+class WatchedFilms(BaseModel):
+    films: list[Film]
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("username", help="Letterboxd username")
+    parser.add_argument("--rss", help="RSS feed URL")
+    args = parser.parse_args()
+
+    if not args.rss:
+        args.rss = "https://letterboxd.com/{}/rss/".format(args.username)
+
+    feed = feedparser.parse(args.rss)
+
+    films = WatchedFilms(films=[])
+
+    for entry in feed.entries:
+        f = Film(
+            title=entry.letterboxd_filmtitle,
+            year=entry.letterboxd_filmyear,
+            tmdb_id=entry.tmdb_movieid,
+            watched_date=entry.letterboxd_watcheddate,
+            rating=entry.letterboxd_memberrating)
+        films.films.append(f)
+
+    print(films.model_dump_json(indent=4))
